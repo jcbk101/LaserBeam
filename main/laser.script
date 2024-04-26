@@ -1,0 +1,114 @@
+
+-- Color set to use for the laser and particles
+local colors = {
+	vmath.vector4(1, 1, 1, 1),	
+	vmath.vector4(1, 0, 0, 1),
+	vmath.vector4(1, 1, 0, 1),
+	vmath.vector4(1, 0, 1, 1),
+	vmath.vector4(0, 1, 0, 1),
+	vmath.vector4(0, 1, 1, 1),
+	vmath.vector4(0, 0, 1, 1)
+}
+
+----------------------------------------------
+--
+----------------------------------------------
+function init(self)
+	msg.post(".", "acquire_input_focus")
+
+	self.groups = { hash("ground") }
+	self.mouse_pos = vmath.vector3(0)
+
+	particlefx.play("tail#tail")
+	particlefx.play("head#head")
+	particlefx.play("head#spark")	
+
+	self.c_index = 1
+end
+
+
+----------------------------------------------
+--
+----------------------------------------------
+function fixed_update(self, dt)
+
+	-- This is the parent node that gets rotated, etc.
+	local tail_pos = go.get_position("tail")
+	-- Convert 'to' position into a relative position based on tail_pos and extend by 1000 (or max distance)
+	local result = physics.raycast( tail_pos, (self.mouse_pos - tail_pos) * 1000 , self.groups )
+
+	if result ~= nil then
+		local pos = go.get_position("laser")			
+		local size_spr = go.get("laser#sprite", "size")
+		local size_ctr = go.get("laser#center", "size")		
+		local tail_pos = go.get_position("tail")
+		local head_pos = go.get_position("head")
+		local angle = math.atan2(result.position.x - tail_pos.x, tail_pos.y - result.position.y)
+
+		-- Calculate the disatnce between point of contact and the base ray position		
+		local distance = vmath.length(vmath.vector3(result.position - tail_pos))
+
+		-- Distance should remain in positive direction
+		distance = math.abs(distance)
+
+		-- Set the angle based on two positions
+		go.set("tail", "euler.z", math.deg(angle) - 90)
+
+		-- DEBUG: Draw a line for the raycaster				
+		--msg.post("@render:", "draw_line", { start_point = tail_pos, end_point = result.position , color = vmath.vector4(1, 0, 0, 1)} )
+
+		-- Change the length of the laser based on the calculated distance
+		go.set("laser#sprite", "size", vmath.vector3( distance, size_spr.y, size_spr.z))
+		go.set("laser#center", "size", vmath.vector3( distance, size_ctr.y, size_ctr.z))
+
+		-- Adjust the ray on the anchor point
+		go.set_position(vmath.vector3(distance * 0.5, pos.y, pos.z), "laser")
+
+		-- Set the head particle position at the end of the ray, dependent on the calculated distance
+		go.set_position(vmath.vector3((distance - 16) * 0.5, head_pos.y, head_pos.z), "head")			
+	end
+
+	-- Simulate a laser effect (Is there a better way without using animation?)
+	local a = math.random(60,100)/100
+
+	go.set("laser#sprite", "tint.w", a)
+	go.set("laser#center", "tint.w", a)	
+	-- Random size scaling for impulse effect
+	go.set("head#sprite", "scale", vmath.vector3(a * 1.05, a * 1.05, 1))
+
+end
+
+
+----------------------------------------------
+--
+----------------------------------------------
+function on_input(self, action_id, action)
+	if action_id == hash("touch") and action.released then
+		self.c_index = self.c_index + 1
+		if self.c_index > #colors then
+			self.c_index = 1
+		end
+
+		-- Set a color
+		go.set("laser#sprite", "tint", colors[ self.c_index ])
+		go.set("head#sprite", "tint", colors[ self.c_index ])
+		particlefx.set_constant("head", "emitter", "tint", colors[ self.c_index ] )
+		particlefx.set_constant("tail", "emitter", "tint", colors[ self.c_index ] )		
+		particlefx.set_constant("head", "emitter1", "tint", colors[ self.c_index ] )				
+
+	elseif action.x and action.y then
+		self.mouse_pos.x = action.x
+		self.mouse_pos.y = action.y
+	end
+end
+
+
+----------------------------------------------
+--
+----------------------------------------------
+function final(self)
+	particlefx.stop("tail#tail", { clear = true })
+	particlefx.stop("head#head", { clear = true })
+	particlefx.stop("head#spark", { clear = true })
+	go.delete()	
+end
